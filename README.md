@@ -3,11 +3,10 @@
 ## Project Description
 This project implements a simplified blockchain-based pharmaceutical supply chain provenance system.  
 It tracks drug batches as they move through key stakeholders in the supply chain:
-
-- Manufacturer
-- Distributor
-- Pharmacy
-- Auditor
+- Manufacturer: Creates product batches
+- Distributor: Transfers and logs shipment details
+- Pharmacy: Receives and finalizes product
+- Auditor: Verifies product history
 
 The goal is to improve transparency, traceability, and trust by recording product lifecycle events on a blockchain.  
 Each batch has a unique identifier, current owner, status, and immutable provenance history.
@@ -17,6 +16,18 @@ This project is developed as part of an academic team assignment for a blockchai
 The objective is to design and implement a simplified pharmaceutical supply chain provenance system using blockchain concepts.
 
 The implementation focuses on demonstrating core ideas such as immutability, traceability, and decentralized trust in a controlled, educational setting.
+
+## System Architecture
+- **Frontend (React)**  
+  Provides user interface for interacting with the system.
+- **Ethers.js**  
+  Acts as a bridge between the frontend and blockchain.
+- **Smart Contract (Solidity)**  
+  Implements business logic, data storage, and access control.
+- **Blockchain (Hardhat Network)**  
+  Stores immutable transaction data.
+- **Off-chain Storage (JSON)**  
+  Stores detailed process data, serialized and passed to the smart contract.
 
 ## Features
 - Create pharmaceutical product batches
@@ -33,29 +44,38 @@ The implementation focuses on demonstrating core ideas such as immutability, tra
 5. Distributor logs "Shipped" step
 6. Ownership is transferred to Pharmacy
 7. Pharmacy logs "Received" step
-8. Auditor retrieves batch history using `getBatchLogs()`
+8. Auditor can retrieve batch history
 
-## Tech Stack
-- Solidity
-- Hardhat
-- Ethers.js
-- Ethereum local Hardhat network
+## Technology Stack
+- **Language:** Solidity, JavaScript
+- **Framework:** Hardhat
+- **Library:** Ethers.js
+- **Blockchain:** Ethereum (local Hardhat network)
+- **Wallet:** MetaMask
+- **Storage:** JSON (off-chain simulation)
 
-## Dependencies
-Install the following in your project:
+## Prerequisites
+Install the following:
+- Node.js (v16 or higher)
+- npm
+- MetaMask browser extension
 
-```bash
+## Installation
+Clone the repository:
+git clone <our-repo-url>
+cd <your-project-folder>
+
+Install dependencies:
+npm install
+or
 npm init -y
 npm install --save-dev hardhat
 npm install --save-dev @nomicfoundation/hardhat-toolbox
 npm install ethers
-```
 
 ## Usage
-
 ### 1. Start Local Blockchain
 Run a local Ethereum network using Hardhat:
-
 ```bash
 npx hardhat node
 ```
@@ -76,14 +96,18 @@ npx hardhat console --network localhost
 ```
 
 ### 5. Interact with the Contract
+- Open MetaMask
+- Add a new network: Network Name and RPC URL
+- Import a Hardhat account by copying private key from Hardhat terminal, then import into MEtaMask
+
+### 6. Interact with the Contract
 You can interact with the deployed contract using:
 - Hardhat console
 - Test scripts
-- Optional frontend (if implemented)
+- Optional frontend (if implemented):
 
 ## Contributors
 This project was developed as a team effort by:
-
 - Kannan Meiappan
 - Lingya Chen
 - Priyananda Vangala
@@ -92,7 +116,6 @@ This project was developed as a team effort by:
 Each member contributed collaboratively to different aspects of the project including smart contract development, frontend implementation, testing, and documentation.
 
 ## Disclaimer
-
 This project is a simplified academic prototype developed for educational purposes.
 
 It is designed to demonstrate core blockchain concepts such as:
