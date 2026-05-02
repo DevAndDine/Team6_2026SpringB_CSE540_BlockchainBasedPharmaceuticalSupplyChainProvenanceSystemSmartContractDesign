@@ -1,0 +1,12 @@
+{
+  "name": "offchain",
+  "version": "1.0.0",
+  "description": "Local off-chain JSON store (CID addressed)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

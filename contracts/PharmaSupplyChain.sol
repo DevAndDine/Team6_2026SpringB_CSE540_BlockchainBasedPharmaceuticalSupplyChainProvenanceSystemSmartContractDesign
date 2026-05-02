@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 /**
 ===================================================================
-Blockchain-Based Pharmaceutical Supply Chain Provenance System 
+Blockchain-Based Pharmaceutical Supply Chain Provenance System
 Project for Course CSE 540 — Engineering Blockchain Applications
 ===================================================================
  * @title PharmaSupplyChain
@@ -18,22 +18,33 @@ Project for Course CSE 540 — Engineering Blockchain Applications
  * @dev
  * DESIGN PRINCIPLES:
  * - Blockchain stores critical state (ownership, status, provenance logs)
- * - Off-chain JSON is stored as serialized strings for detailed metadata
+ * - Off-chain JSON is stored in a local service and referenced on-chain by an IPFS-style CID string
  * - Role-based access control ensures only authorized actions
- * - Separation of concerns:
- *      - State (Batch)
- *      - History (ProcessRecord)
- * - Event-driven architecture for frontend integration
+ * - Separation of concerns: Batch (state) vs ProcessRecord (history)
+ * - Custom errors for predictable revert reasons and smaller bytecode than strings
  */
 contract PharmaSupplyChain {
+    /* =============================================================
+                        CUSTOM ERRORS (structured reverts)
+    ============================================================= */
+    error NotAdmin();
+    error UnauthorizedRole();
+    error BatchDoesNotExist();
+    error BatchAlreadyExists();
+    error NotBatchOwner();
+    error InvalidReceiver();
+    error InvalidAddress();
+    error EmptyString();
+    error InvalidStatusProgression();
+    error BatchNotDelivered();
+    error VerificationOnlyByAuditor();
+    error InvalidCid();
 
     /* =============================================================
                         ENUMS
     ============================================================= */
 
-    /**
-     * @dev Defines roles for participants in supply chain
-     */
+    /// @dev Defines roles for participants in supply chain
     enum Role {
         None,
         Manufacturer,
@@ -42,9 +53,7 @@ contract PharmaSupplyChain {
         Auditor
     }
 
-    /**
-     * @dev Defines lifecycle stages of a batch
-     */
+    /// @dev Defines lifecycle stages of a batch
     enum BatchStatus {
         Created,
         InTransit,
@@ -56,15 +65,7 @@ contract PharmaSupplyChain {
                         STRUCTS
     ============================================================= */
 
-    /**
-     * @dev Represents a pharmaceutical product batch
-     *
-     * @param id Unique identifier of the batch
-     * @param owner Current owner of the batch
-     * @param metadata Basic description (e.g., drug name)
-     * @param status Current lifecycle stage
-     * @param exists Flag to check existence
-     */
+    /// @dev Represents a pharmaceutical product batch
     struct Batch {
         uint256 id;
         address owner;
@@ -73,20 +74,10 @@ contract PharmaSupplyChain {
         bool exists;
     }
 
-    /**
-     * @dev Represents a provenance record (history log)
-     *
-     * @param step Human-readable action label
-     * @param data JSON string storing detailed off-chain info
-     * @param timestamp Time of action
-     * @param actor Address performing the action
-     *
-     * NOTE:
-     * This struct captures immutable history and should NOT be modified.
-     */
+    /// @dev Immutable provenance log entry; detailed payload stays as JSON string (off-chain style)
     struct ProcessRecord {
         string step;
-        string data;
+        string cid;
         uint256 timestamp;
         address actor;
     }
@@ -98,60 +89,43 @@ contract PharmaSupplyChain {
     /// @dev System administrator (deployer)
     address public admin;
 
-    /// @dev Mapping from batch ID to Batch
     mapping(uint256 => Batch) private batches;
-
-    /// @dev Mapping from batch ID to its full provenance history
     mapping(uint256 => ProcessRecord[]) private histories;
-
-    /// @dev Mapping from address to role
     mapping(address => Role) public roles;
 
     /* =============================================================
-                            EVENTS
+                        EVENTS
     ============================================================= */
 
-    /// @dev Emitted when role is assigned
     event RoleAssigned(address indexed user, Role role);
-
-    /// @dev Emitted when a batch is created
-    event BatchCreated(uint256 indexed batchId, address indexed owner);
-
-    /// @dev Emitted when ownership changes
-    event OwnershipTransferred(uint256 indexed batchId, address from, address to);
-
-    /// @dev Emitted when process step is logged
-    event ProcessLogged(uint256 indexed batchId, string step, address actor);
-
-    /// @dev Emitted when batch status changes
+    event BatchCreated(uint256 indexed batchId, address indexed owner, string metadata);
+    event OwnershipTransferred(uint256 indexed batchId, address indexed from, address indexed to);
+    event ProcessLogged(uint256 indexed batchId, string step, address indexed actor, string cid);
     event StatusUpdated(uint256 indexed batchId, BatchStatus status);
+    /// @dev Emitted when an auditor marks a batch as cryptographically "verified" on-chain
+    event BatchVerified(uint256 indexed batchId, address indexed auditor);
 
     /* =============================================================
                         MODIFIERS
     ============================================================= */
 
-    /// @dev Restricts access to admin only
     modifier onlyAdmin() {
-        require(msg.sender == admin, "Not admin");
+        if (msg.sender != admin) revert NotAdmin();
         _;
     }
 
-    /// @dev Restricts access to specific role
     modifier onlyRole(Role _role) {
-        require(roles[msg.sender] == _role, "Unauthorized role");
+        if (roles[msg.sender] != _role) revert UnauthorizedRole();
         _;
     }
 
-    /// @dev Ensures batch exists
     modifier batchExists(uint256 _id) {
-        require(batches[_id].exists, "Batch does not exist");
+        if (!batches[_id].exists) revert BatchDoesNotExist();
         _;
     }
 
-
-    /// @dev Ensures caller is batch owner
     modifier onlyOwner(uint256 _id) {
-        require(batches[_id].owner == msg.sender, "Not owner");
+        if (batches[_id].owner != msg.sender) revert NotBatchOwner();
         _;
     }
 
@@ -159,10 +133,7 @@ contract PharmaSupplyChain {
                         CONSTRUCTOR
     ============================================================= */
 
-    /**
-     * @dev Initializes contract
-     * - Assigns deployer as admin and manufacturer
-     */
+    /// @dev Deployer becomes admin and initial manufacturer (demo-friendly seed)
     constructor() {
         admin = msg.sender;
         roles[msg.sender] = Role.Manufacturer;
@@ -172,14 +143,9 @@ contract PharmaSupplyChain {
                         ROLE MANAGEMENT
     ============================================================= */
 
-    /**
-     * @notice Assign role to a user
-     * @dev Only admin can assign roles
-     */
-    function assignRole(address _user, Role _role)
-        public
-        onlyAdmin
-    {
+    /// @notice Admin assigns a role to an account (None clears role for access checks that require non-None receiver elsewhere)
+    function assignRole(address _user, Role _role) public onlyAdmin {
+        if (_user == address(0)) revert InvalidAddress();
         roles[_user] = _role;
         emit RoleAssigned(_user, _role);
     }
@@ -188,15 +154,10 @@ contract PharmaSupplyChain {
                         CORE FUNCTIONS
     ============================================================= */
 
-    /**
-     * @notice Create a new batch
-     * @dev Only Manufacturer can create batches
-     */
-    function createBatch(uint256 _id, string memory _metadata)
-        public
-        onlyRole(Role.Manufacturer)
-    {
-        require(!batches[_id].exists, "Batch exists");
+    /// @notice Manufacturer registers a new batch ID with basic metadata (extended detail via JSON in logProcessStep)
+    function createBatch(uint256 _id, string memory _metadata) public onlyRole(Role.Manufacturer) {
+        if (batches[_id].exists) revert BatchAlreadyExists();
+        if (bytes(_metadata).length == 0) revert EmptyString();
 
         batches[_id] = Batch({
             id: _id,
@@ -206,122 +167,98 @@ contract PharmaSupplyChain {
             exists: true
         });
 
-        // add initial history
-        histories[_id].push(ProcessRecord({
-            step: "Created",
-            data: _metadata,
-            timestamp: block.timestamp,
-            actor: msg.sender
-        }));
+        histories[_id].push(
+            ProcessRecord({
+                step: "Created",
+                cid: "",
+                timestamp: block.timestamp,
+                actor: msg.sender
+            })
+        );
 
-        emit BatchCreated(_id, msg.sender);
+        emit BatchCreated(_id, msg.sender, _metadata);
     }
 
-    /**
-     * @notice Transfer batch ownership
-     * @dev Ownership change reflects supply chain movement
-     */
-    function transferBatch(uint256 _id, address _to)
-        public
-        batchExists(_id)
-        onlyOwner(_id)
-    {
-        require(roles[_to] != Role.None, "Invalid receiver");
+    /// @notice Current owner transfers custody; receiver must already have a supply-chain role
+    function transferBatch(uint256 _id, address _to) public batchExists(_id) onlyOwner(_id) {
+        if (_to == address(0)) revert InvalidAddress();
+        if (roles[_to] == Role.None) revert InvalidReceiver();
 
         address prev = batches[_id].owner;
         batches[_id].owner = _to;
-
-        // update status automatically
         batches[_id].status = BatchStatus.InTransit;
 
-        histories[_id].push(ProcessRecord({
-            step: "Transferred",
-            data: "Ownership transferred",
-            timestamp: block.timestamp,
-            actor: msg.sender
-        }));
-
-        emit OwnershipTransferred(_id, prev, _to);
-    }
-
-    /**
-     * @notice Update batch lifecycle status
-     * @dev Should reflect real supply chain stages
-     */
-    function updateStatus(uint256 _id, BatchStatus _status)
-        public
-        batchExists(_id)
-        onlyOwner(_id)
-    {
-        require(
-            uint(_status) > uint(batches[_id].status),
-            "Invalid status progression"
+        histories[_id].push(
+            ProcessRecord({
+                step: "Transferred",
+                cid: "",
+                timestamp: block.timestamp,
+                actor: msg.sender
+            })
         );
 
+        emit OwnershipTransferred(_id, prev, _to);
+        emit StatusUpdated(_id, BatchStatus.InTransit);
+    }
+
+    /// @notice Owner advances lifecycle (e.g. pharmacy marks delivered). Verified is reserved for auditors.
+    function updateStatus(uint256 _id, BatchStatus _status) public batchExists(_id) onlyOwner(_id) {
+        if (_status == BatchStatus.Verified) revert VerificationOnlyByAuditor();
+        if (uint256(_status) <= uint256(batches[_id].status)) revert InvalidStatusProgression();
         batches[_id].status = _status;
         emit StatusUpdated(_id, _status);
     }
 
-    /**
-     * @notice Log a process step for provenance tracking
-     *
-     * @dev
-     * This function records detailed history of actions performed on a batch.
-     * It complements the Batch struct by storing time-series data.
-     *
-     * Example:
-     * - step: "Shipped"
-     * - data: JSON string with logistics details
-     *
-     * IMPORTANT:
-     * This does NOT modify batch state; it only appends history.
-     */
-    function logProcessStep(
-        uint256 _id,
-        string memory _step,
-        string memory _data
-    )
+    /// @notice Append an immutable process step by referencing an off-chain JSON payload CID
+    /// @dev `_cid` should be an IPFS-style CID (produced by the local off-chain service in this repo).
+    function logProcessStep(uint256 _id, string memory _step, string memory _cid)
         public
         batchExists(_id)
         onlyOwner(_id)
     {
-        histories[_id].push(ProcessRecord({
-            step: _step,
-            data: _data,
-            timestamp: block.timestamp,
-            actor: msg.sender
-        }));
+        if (bytes(_step).length == 0) revert EmptyString();
+        if (bytes(_cid).length == 0) revert InvalidCid();
 
-        emit ProcessLogged(_id, _step, msg.sender);
+        histories[_id].push(
+            ProcessRecord({step: _step, cid: _cid, timestamp: block.timestamp, actor: msg.sender})
+        );
+
+        emit ProcessLogged(_id, _step, msg.sender, _cid);
+    }
+
+    /// @notice Auditor attests that they reviewed on-chain history (does not replace regulatory audit)
+    function verifyBatch(uint256 _id) public batchExists(_id) onlyRole(Role.Auditor) {
+        if (batches[_id].status != BatchStatus.Delivered) revert BatchNotDelivered();
+
+        batches[_id].status = BatchStatus.Verified;
+
+        histories[_id].push(
+            ProcessRecord({
+                step: "Verified",
+                cid: "",
+                timestamp: block.timestamp,
+                actor: msg.sender
+            })
+        );
+
+        emit StatusUpdated(_id, BatchStatus.Verified);
+        emit BatchVerified(_id, msg.sender);
     }
 
     /* =============================================================
                         VIEW FUNCTIONS
     ============================================================= */
 
-    /**
-     * @notice Get current batch state
-     * @dev Returns latest snapshot (NOT history)
-     */
-    function getBatch(uint256 _id)
-        public
-        view
-        batchExists(_id)
-        returns (Batch memory)
-    {
+    function getBatch(uint256 _id) public view batchExists(_id) returns (Batch memory) {
         return batches[_id];
     }
 
-    /**
-     * @notice Get full provenance history
-     * @dev Returns chronological list of all actions
-     */
-    function getBatchHistory(uint256 _id)
-        public
-        view
-        batchExists(_id)
-        returns (ProcessRecord[] memory)
-    {
+    function getBatchHistory(uint256 _id) public view batchExists(_id) returns (ProcessRecord[] memory) {
         return histories[_id];
+    }
+
+    /// @notice Role lookup helper for UIs (same as public mapping getter but explicit)
+    function getRole(address _account) public view returns (Role) {
+        return roles[_account];
     }
 }
