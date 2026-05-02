@@ -1,9 +1,23 @@
 {
+  "name": "pharma-supply-chain",
+  "private": true,
   "devDependencies": {
-    "@nomicfoundation/hardhat-toolbox": "^7.0.0",
-    "hardhat": "^3.3.0"
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.17"
   },
   "dependencies": {
-    "ethers": "^6.16.0"
+    "bs58": "^6.0.0",
+    "cors": "^2.8.6",
+    "ethers": "^6.13.0",
+    "express": "^5.2.1"
+  },
+  "scripts": {
+    "compile": "hardhat compile",
+    "copy-abi": "node scripts/copy-abi.js",
+    "test": "hardhat test",
+    "node": "hardhat node",
+    "deploy:local": "hardhat run scripts/deploy.js --network localhost",
+    "demo": "hardhat run scripts/demo.js --network localhost",
+    "offchain": "npm --prefix offchain start"
   }
 }

@@ -1,41 +1,56 @@
+/**
+ * End-to-end demo on localhost: manufacturer → distributor → pharmacy → auditor.
+ * Run after `npx hardhat node` in another terminal:
+ *   npm run demo
+ *
+ * Uses Hardhat accounts #0–#4 (import private keys into MetaMask for UI testing).
+ */
 const hre = require("hardhat");
 
 async function main() {
-  const [admin, distributor] = await hre.ethers.getSigners();
+  const [manufacturer, distributor, pharmacy, auditor] = await hre.ethers.getSigners();
 
-  console.log("Admin:", admin.address);
-  console.log("Distributor:", distributor.address);
-
-  const Contract = await hre.ethers.getContractFactory("PharmaSupplyChain");
-  const contract = await Contract.deploy();
+  const Factory = await hre.ethers.getContractFactory("PharmaSupplyChain");
+  const contract = await Factory.connect(manufacturer).deploy();
   await contract.waitForDeployment();
 
-  console.log("Contract deployed at:", await contract.getAddress());
+  const addr = await contract.getAddress();
+  console.log("Deployed PharmaSupplyChain at:", addr);
 
-  // Step 1: Assign role
-  await contract.assignRole(distributor.address, 2);
-  console.log("✔ Distributor role assigned");
+  const Role = { Distributor: 2, Pharmacy: 3, Auditor: 4 };
+  const BatchStatus = { Delivered: 2 };
 
-  // Step 2: Create batch
-  await contract.createBatch(1, "Drug A");
-  console.log("✔ Batch created");
+  await contract.connect(manufacturer).assignRole(distributor.address, Role.Distributor);
+  await contract.connect(manufacturer).assignRole(pharmacy.address, Role.Pharmacy);
+  await contract.connect(manufacturer).assignRole(auditor.address, Role.Auditor);
+  console.log("Roles assigned to distributor, pharmacy, auditor.");
 
-  // Step 3: Transfer ownership
-  await contract.transferBatch(1, distributor.address);
-  console.log("✔ Ownership transferred");
+  const batchId = 101n;
+  await contract.connect(manufacturer).createBatch(batchId, '{"drug":"DemoDrug","lot":"D-101"}');
+  console.log("Batch created:", batchId.toString());
 
-  // Step 4: Distributor logs process
-  await contract.connect(distributor).logProcessStep(
-    1,
-    "Shipped",
-    '{"location":"Warehouse A"}'
-  );
-  console.log("✔ Process step logged");
+  await contract.connect(manufacturer).logProcessStep(batchId, "Manufactured", "QmLocalCidManufactured1111111111111111111111111111");
 
-  // Step 5: Query history
-  const history = await contract.getBatchHistory(1);
-  console.log("✔ Batch history:");
-  console.log(history);
+  await contract.connect(manufacturer).transferBatch(batchId, distributor.address);
+  console.log("Transferred to distributor.");
+
+  await contract.connect(distributor).logProcessStep(batchId, "Shipped", "QmLocalCidShipped22222222222222222222222222222222");
+
+  await contract.connect(distributor).transferBatch(batchId, pharmacy.address);
+  console.log("Transferred to pharmacy.");
+
+  await contract.connect(pharmacy).logProcessStep(batchId, "Received", "QmLocalCidReceived3333333333333333333333333333333");
+  await contract.connect(pharmacy).updateStatus(batchId, BatchStatus.Delivered);
+  console.log("Pharmacy marked Delivered.");
+
+  await contract.connect(auditor).verifyBatch(batchId);
+  console.log("Auditor verified batch.");
+
+  const batch = await contract.getBatch(batchId);
+  console.log("Final status:", batch.status.toString(), "(3 = Verified)");
+
+  const history = await contract.getBatchHistory(batchId);
+  console.log("History entries:", history.length);
 }
 
 main().catch((error) => {

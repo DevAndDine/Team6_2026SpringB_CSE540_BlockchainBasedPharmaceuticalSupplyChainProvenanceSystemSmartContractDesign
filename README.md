@@ -1,137 +1,170 @@
 # Blockchain-Based Pharmaceutical Supply Chain Provenance System
 
-## Project Description
-This project implements a simplified blockchain-based pharmaceutical supply chain provenance system.  
-It tracks drug batches as they move through key stakeholders in the supply chain:
-- Manufacturer: Creates product batches
-- Distributor: Transfers and logs shipment details
-- Pharmacy: Receives and finalizes product
-- Auditor: Verifies product history
+Academic prototype for CSE 540: batch-level provenance on Ethereum (local Hardhat), with a React + MetaMask frontend and Solidity contracts using role-based access, events, custom errors, and tests.
 
-The goal is to improve transparency, traceability, and trust by recording product lifecycle events on a blockchain.  
-Each batch has a unique identifier, current owner, status, and immutable provenance history.
+## Architecture (from proposal)
 
-## Project Context
-This project is developed as part of an academic team assignment for a blockchain engineering course.  
-The objective is to design and implement a simplified pharmaceutical supply chain provenance system using blockchain concepts.
+| Piece | Role |
+|--------|------|
+| **Smart contract** | Stores batch ownership, status, immutable process history; RBAC; JSON strings for off-chain-style detail |
+| **Frontend** | MetaMask + Ethers.js v6 to call the contract and show lifecycle/history |
+| **Hardhat local network** | Local testnet (`localhost`, chain id **31337**) |
 
-The implementation focuses on demonstrating core ideas such as immutability, traceability, and decentralized trust in a controlled, educational setting.
-
-## System Architecture
-- **Frontend (React)**  
-  Provides user interface for interacting with the system.
-- **Ethers.js**  
-  Acts as a bridge between the frontend and blockchain.
-- **Smart Contract (Solidity)**  
-  Implements business logic, data storage, and access control.
-- **Blockchain (Hardhat Network)**  
-  Stores immutable transaction data.
-- **Off-chain Storage (JSON)**  
-  Stores detailed process data, serialized and passed to the smart contract.
-
-## Features
-- Create pharmaceutical product batches
-- Transfer ownership between stakeholders
-- Log process steps such as manufacturing, shipping, and receiving
-- Retrieve provenance history for verification
-- Enforce role-based access control
-
-## Example Workflow
-1. Admin assigns roles (Manufacturer, Distributor, Pharmacy, Auditor)
-2. Manufacturer creates a new batch
-3. Manufacturer logs "Manufactured" step
-4. Ownership is transferred to Distributor
-5. Distributor logs "Shipped" step
-6. Ownership is transferred to Pharmacy
-7. Pharmacy logs "Received" step
-8. Auditor can retrieve batch history
-
-## Technology Stack
-- **Language:** Solidity, JavaScript
-- **Framework:** Hardhat
-- **Library:** Ethers.js
-- **Blockchain:** Ethereum (local Hardhat network)
-- **Wallet:** MetaMask
-- **Storage:** JSON (off-chain simulation)
+**Stakeholders:** Manufacturer (creates batches), Distributor, Pharmacy, Auditor (`verifyBatch` after **Delivered**), plus Admin (deployer, assigns roles).
 
 ## Prerequisites
-Install the following:
-- Node.js (v20.17+ or v22 recommended)
+
+- Node.js 18+ (20 LTS recommended)
 - npm
 - MetaMask browser extension
 
-## Installation  
-Clone the repository:  
-```bash
-git clone <our-repo-url>  
-cd <your-project-folder>
-```
+## One-time setup
 
-Install dependencies:  
 ```bash
+git clone <repo-url>
+cd Team6_2026SpringB_CSE540_BlockchainBasedPharmaceuticalSupplyChainProvenanceSystemSmartContractDesign
 npm install
-```
-or  
-```bash
-npm init -y  
-npm install --save-dev hardhat  
-npm install --save-dev @nomicfoundation/hardhat-toolbox  
-npm install ethers  
+npx hardhat compile
+npm run copy-abi
 ```
 
-## Usage
-### 1. Start Local Blockchain
-Run a local Ethereum network using Hardhat:
+`copy-abi` copies `artifacts/.../PharmaSupplyChain.json` → `frontend/src/abi/PharmaSupplyChain.json`. Run it again whenever the contract ABI changes.
+
+```bash
+cd frontend && npm install && cd ..
+```
+
+## Run the local blockchain
+
+**Terminal 1 — keep this running:**
+
 ```bash
 npx hardhat node
 ```
 
-### 2. Compile Smart Contract
+Copy one or more **private keys** from the printed accounts list if you want to import them into MetaMask (each role can use a different account).
+
+## Deploy the contract (localhost)
+
+**Terminal 2:**
+
 ```bash
-npx hardhat compile
+npm run deploy:local
 ```
 
-### 3. Deploy the contract
+Note the printed address. It is also saved to `deployments/localhost.json`.
+
+## Point the React app at the contract
+
 ```bash
-npx hardhat run scripts/deploy.js --network localhost
+cp frontend/.env.example frontend/.env.local
 ```
 
-### 4. Start Hardhat console
+Edit `frontend/.env.local` and set:
+
 ```bash
-npx hardhat console --network localhost
+VITE_CONTRACT_ADDRESS=<paste_deployed_address>
+VITE_OFFCHAIN_API_URL=http://127.0.0.1:8787
 ```
 
-### 5. Interact with the Contract
-- Open MetaMask
-- Add a new network: Network Name and RPC URL
-- Import a Hardhat account by copying private key from Hardhat terminal, then import into MEtaMask
+## Run the local off-chain JSON store (CID addressed)
 
-### 6. Interact with the Contract
-You can interact with the deployed contract using:
-- Hardhat console
-- Test scripts
-- Optional frontend (if implemented):
+**Terminal 2 (or any free terminal):**
+
+```bash
+npm run offchain
+```
+
+This starts a small Express server that stores JSON on disk in `offchain/storage/` and returns an **IPFS-style CID** (CIDv0-like base58 multihash of the JSON content).
+
+## Configure MetaMask for Hardhat
+
+1. Open MetaMask → **Networks** → **Add network** → **Add a network manually**.
+2. **Network name:** `Hardhat Local`  
+   **RPC URL:** `http://127.0.0.1:8545`  
+   **Chain ID:** `31337`  
+   **Currency symbol:** `ETH`
+3. Import a private key from the `hardhat node` terminal (e.g. account #0 is deployer / admin / manufacturer).
+
+Use additional imported accounts for distributor, pharmacy, and auditor after the admin assigns roles in the UI.
+
+## Start the frontend
+
+**Terminal 3:**
+
+```bash
+cd frontend
+npm run dev
+```
+
+Open the URL shown (usually `http://localhost:5173`). Click **Connect MetaMask**, then **Switch to Hardhat Local (31337)** if prompted.
+
+### Typical UI workflow
+
+1. **Admin (deployer):** **Assign role** — grant Distributor / Pharmacy / Auditor to addresses you control (other imported accounts).
+2. **Manufacturer:** **Create batch** — numeric batch ID + metadata (string or JSON).
+3. **Current owner:** **Transfer** custody to the next stakeholder (receiver must already have a non-`None` role).
+4. **Owner:** **Log process step** — step name + JSON `data` (shipment, temperature, etc.).
+5. **Pharmacy (as owner):** **Update status** to **Delivered** after receipt.
+6. **Auditor:** **Mark verified** — sets status to **Verified** (only after **Delivered**).
+7. **Read:** load batch ID to see owner, status, metadata, and full provenance list.
+
+## Scripts reference (repo root)
+
+| Command | Purpose |
+|---------|---------|
+| `npm run compile` | Compile Solidity |
+| `npm run copy-abi` | Refresh `frontend/src/abi` after compile |
+| `npm run test` | Hardhat tests |
+| `npx hardhat node` | Local chain |
+| `npm run deploy:local` | Deploy to `localhost` and write `deployments/localhost.json` |
+| `npm run demo` | Scripted full flow (deploys a **new** contract instance on `localhost`) |
+
+## Automated demo (optional)
+
+With Terminal 1 (`hardhat node`) running:
+
+```bash
+npm run demo
+```
+
+This deploys a fresh contract and walks manufacturer → distributor → pharmacy → auditor. It does **not** update `frontend/.env.local`; use the address printed in that run only if you point the UI at that deployment.
+
+## Smart contract overview
+
+- **File:** `contracts/PharmaSupplyChain.sol`
+- **RBAC:** `assignRole` (admin only); operations gated by `Role` (Manufacturer, Distributor, Pharmacy, Auditor).
+- **Custom errors** for validation and clearer reverts.
+- **Events:** batch creation, transfers, process logs, status updates, auditor verification.
+- **Verified status:** only via `verifyBatch` by an Auditor after **Delivered**; owners cannot set `Verified` through `updateStatus`.
+- **Off-chain JSON references:** `logProcessStep` stores only a CID string on-chain; the JSON lives in the local off-chain store.
+
+## Testing
+
+```bash
+npm run test
+```
+
+Covers happy paths (create, transfer, log, deliver, verify) and edge cases (duplicate batch, empty metadata, unauthorized actions, auditor timing).
+
+## Project structure
+
+```
+contracts/PharmaSupplyChain.sol   # Main contract
+scripts/deploy.js                 # Deploy + save deployments/localhost.json
+scripts/copy-abi.js               # ABI → frontend
+scripts/demo.js                   # Full-flow CLI demo
+test/PharmaSupplyChain.test.js    # Hardhat tests
+frontend/                         # Vite + React + ethers + MetaMask
+```
 
 ## Contributors
-This project was developed as a team effort by:
-- Kannan Meiappan
-- Lingya Chen
-- Priyananda Vangala
-- Yunlin Xie
 
-Each member contributed collaboratively to different aspects of the project including smart contract development, frontend implementation, testing, and documentation.
+- Kannan Meiappan  
+- Lingya Chen  
+- Priyananda Vangala  
+- Yunlin Xie  
 
 ## Disclaimer
-This project is a simplified academic prototype developed for educational purposes.
 
-It is designed to demonstrate core blockchain concepts such as:
-- immutability
-- provenance tracking
-- decentralized trust
-
-This system does NOT:
-- integrate with real-world pharmaceutical supply chain systems
-- comply with regulatory standards such as FDA DSCSA
-- handle production-scale data or security requirements
-
-The implementation is not intended for real-world deployment and should not be used in production environments.
+Educational prototype only — not for production or regulatory compliance.
