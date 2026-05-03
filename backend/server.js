@@ -353,11 +353,24 @@ app.post("/api/log-process-step-as-pharmacy", async (req, res) => {
       return res.status(400).json({ success: false, error: "Missing process step" });
     }
 
-    const tx = await pharmacyContract.logProcessStep(
-      Number(id),
-      step,
-      data || "{}"
-    );
+    if (step === "Delivered") {
+  try {
+    const statusTx = await pharmacyContract.updateStatus(Number(id), 2);
+    await statusTx.wait();
+  } catch (error) {
+    const message = getErrorMessage(error);
+
+    if (!message.includes("Invalid status progression")) {
+      throw error;
+    }
+  }
+}
+
+const tx = await pharmacyContract.logProcessStep(
+  Number(id),
+  step,
+  data || "{}"
+);
 
     const receipt = await tx.wait();
     const history = await contract.getBatchHistory(Number(id));
