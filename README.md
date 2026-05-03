@@ -18,8 +18,8 @@ The objective is to design and implement a simplified pharmaceutical supply chai
 The implementation focuses on demonstrating core ideas such as immutability, traceability, and decentralized trust in a controlled, educational setting.
 
 ## System Architecture
-- **Frontend (React)**  
-  Provides user interface for interacting with the system.
+-**CLI**
+  
 - **Ethers.js**  
   Acts as a bridge between the frontend and blockchain.
 - **Smart Contract (Solidity)**  
@@ -47,20 +47,29 @@ The implementation focuses on demonstrating core ideas such as immutability, tra
 8. Auditor can retrieve batch history
 
 ## Technology Stack
-Solidity – Smart contract development
-Ethereum (Hardhat Local Network) – Blockchain execution environment
-Hardhat – Development, testing, and deployment framework
-Ethers.js – Interaction with smart contracts
-Node.js – Runtime environment
-Express.js – REST API server
-dotenv – Environment variable management
-Axios – HTTP requests (IPFS / external APIs)
+  ### Blockchain
+    - Solidity  
+    - Ethereum (Hardhat local network)  
+    - Hardhat  
+    - ethers.js  
+
+  ### Backend
+    - Node.js  
+    - Express.js  
+    - dotenv  
+    - Axios 
+  ### Storage
+    - IPFS-style metadata (local simulation)  
+    - JSON  
 
 ## Prerequisites
 Install the following:
-- Node.js (v20.17+ or v22 recommended)
-- npm
-- 
+- Node.js (v16+)  
+- npm  
+- Git  
+- Hardhat  
+- curl or Postman 
+
 ## Installation  
 Install dependencies:  
 ```bash
@@ -75,31 +84,81 @@ npm install ethers
 ```
 
 ## Usage
-### 1. Start Local Blockchain
+### 1. Start Local Blockchain (Terminal 1)
 Run a local Ethereum network using Hardhat:
 ```bash
 npx hardhat node
 ```
 
-### 2. Deploy the contract
+### 2. Deploy the contract (Terminal 2)
 ```bash
 npx hardhat run scripts/deploy_backend.js --network localhost
 ```
 
-### 3. Start backend server
+### 3. Start backend server (Terminal 3)
 ```bash
 node server.js
 ```
 
 ### 4. Interact with the Contract
-- Add a new network: Network Name and RPC URL
-- Import a Hardhat account by copying private key from Hardhat terminal, then import into MEtaMask
+All interactions with the smart contract are performed through the backend API. The backend signs transactions using role-specific private keys and communicates with the blockchain using ethers.js.
 
-### 5. Interact with the Contract
-You can interact with the deployed contract using:
-- Hardhat console
-- Test scripts
-- Optional frontend (if implemented):
+  ### Health Check
+    - curl http://localhost:5001/api/health
+  
+  ### Assign Roles 
+  # Assign Distributor (Role = 2)
+curl -X POST http://localhost:5001/api/assign-role \
+  -H "Content-Type: application/json" \
+  -d '{"user":"0x70997970C51812dc3A010C7d01b50e0d17dc79C8","role":2}'
+
+  # Assign Pharmacy (Role = 3)
+curl -X POST http://localhost:5001/api/assign-role \
+  -H "Content-Type: application/json" \
+  -d '{"user":"0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC","role":3}'
+  # Create Batch
+  curl -X POST http://localhost:5001/api/create-batch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id":1,
+    "metadata":{
+      "drugName":"Drug A",
+      "lotNumber":"LOT-001",
+      "origin":"St. Louis"
+    }
+  }'
+ ### Transfer Batch 
+   # Manufacturer → Distributor
+curl -X POST http://localhost:5001/api/transfer-batch \
+  -H "Content-Type: application/json" \
+  -d '{"id":1,"newOwner":"0x70997970C51812dc3A010C7d01b50e0d17dc79C8"}'
+
+  # Distributor → Pharmacy
+curl -X POST http://localhost:5001/api/transfer-batch-as-distributor \
+  -H "Content-Type: application/json" \
+  -d '{"id":1,"newOwner":"0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"}'
+
+ ### Log Delivery
+ curl -X POST http://localhost:5001/api/log-process-step-as-pharmacy \
+  -H "Content-Type: application/json" \
+  -d '{"id":1,"step":"Delivered","data":"{\"location\":\"Retail Pharmacy\"}"}'
+### View Batch History
+  curl http://localhost:5001/api/batch/<batchid>/history
+
+## 📊 Example Output
+
+Created      → Manufacturer  
+Transferred  → Manufacturer → Distributor  
+Transferred  → Distributor → Pharmacy  
+Delivered    → Pharmacy  
+
+## 🔐 Security Guarantees
+
+- Only current owner can act  
+- Only authorized roles can receive batches  
+- Immutable on-chain history  
+- Unauthorized actions are rejected  
+
 
 ## Contributors
 This project was developed as a team effort by:
