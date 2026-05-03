@@ -163,7 +163,7 @@ curl -X POST http://localhost:5001/api/transfer-batch-as-distributor \
 curl -X POST http://localhost:5001/api/log-process-step-as-pharmacy \  
 -H "Content-Type: application/json" \  
 -d '{"id":1,"step":"Delivered","data":"{\"location\":\"Retail Pharmacy\"}"}'  
-```bash
+```
 
 #### 4.5 View Batch History
  ```bash
